@@ -11,12 +11,12 @@ status() {
         report_status $APP_STATUS_STARTED "$PID"
     fi
 }
+
 start() {
     stop
-    
-    cd $APP_ROOT
-    python ./cloud2lan-bridge.py &
+    sh -c "sleep 15 && cd /useremain/home/rinkhals/apps/cloud2lan-bridge && python3 ./cloud2lan-bridge.py < /dev/null > /tmp/cloud2lan.log 2>&1" &
 }
+
 stop() {
     kill_by_name cloud2lan-bridge.py
 }
