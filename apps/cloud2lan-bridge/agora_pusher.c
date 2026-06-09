@@ -288,9 +288,9 @@ int main(int argc, char *argv[]) {
     *(uint32_t *)service_options = 0xFFFFFFFF; // Set area_code to AREA_CODE_GLOB
     
     // Explicitly configure Agora SDK logging to /tmp/agora_rtc_sdk.log at DEBUG level
-    service_options[68] = 1; // log_disable = false
+    service_options[68] = 1; // log_disable = true
     service_options[69] = 0; // log_disable_desensitize = false
-    *(uint32_t *)(service_options + 72) = 8; // log_level = RTC_LOG_DEBUG
+    *(uint32_t *)(service_options + 72) = 0; // log_level = RTC_LOG_DEFAULT
     *(const char **)(service_options + 76) = "/tmp"; // log_path directory
     
     snprintf((char *)(service_options + 0x58), 0x21, "%s", license);
