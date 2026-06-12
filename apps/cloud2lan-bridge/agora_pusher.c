@@ -283,14 +283,21 @@ int main(int argc, char *argv[]) {
     handler.on_connection_lost         = on_conn_lost;
     handler.on_rejoin_channel_success = on_rejoin;
 
+    uint32_t area_code = 0xFFFFFFFF; // Default to AREA_CODE_GLOB
+    const char *area_env = getenv("AGORA_AREA_CODE");
+    if (area_env) {
+        area_code = (uint32_t)strtoul(area_env, NULL, 0);
+        printf("[INIT] Area code set from environment: 0x%08X\n", area_code);
+    }
+
     uint8_t service_options[0x7c];
     memset(service_options, 0, sizeof(service_options));
-    *(uint32_t *)service_options = 0xFFFFFFFF; // Set area_code to AREA_CODE_GLOB
+    *(uint32_t *)service_options = area_code;
     
     // Explicitly configure Agora SDK logging to /tmp/agora_rtc_sdk.log at DEBUG level
-    service_options[68] = 1; // log_disable = true
+    service_options[68] = 0; // log_disable = false
     service_options[69] = 0; // log_disable_desensitize = false
-    *(uint32_t *)(service_options + 72) = 0; // log_level = RTC_LOG_DEFAULT
+    *(uint32_t *)(service_options + 72) = 8; // log_level = RTC_LOG_DEBUG
     *(const char **)(service_options + 76) = "/tmp"; // log_path directory
     
     snprintf((char *)(service_options + 0x58), 0x21, "%s", license);

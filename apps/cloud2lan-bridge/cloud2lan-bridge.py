@@ -45,20 +45,40 @@ class Program:
     lan_client = None
 
     def __init__(self):
-        self.cloud_config = self.get_cloud_config()
+        self.cloud_config, self.section_name = self.get_cloud_config()
         self.api_config = self.get_api_config()
         self.firmware_version = self.get_firmware_version()
         self.model_id = self.api_config['cloud']['modelId']
         self.cloud_device_id = self.cloud_config['deviceUnionId']
         self.lan_device_id = self.get_lan_device_id()
+        self.area_code = self.get_area_code()
 
     def get_cloud_config(self):
         config = configparser.ConfigParser()
         config.read('/userdata/app/gk/config/device.ini')
-        environment = config['device']['env']
-        zone = config['device']['zone']
-        section_name = f'cloud_{environment}' if zone == 'cn' else f'cloud_{zone}_{environment}'
-        return config[section_name]
+        environment = config['device'].get('env', 'prod').strip()
+        zone = config['device'].get('zone', 'global').strip().lower()
+        if not zone:
+            zone = 'global'
+        
+        section_name = f'cloud_{environment}' if (zone == 'cn' or zone == 'china') else f'cloud_{zone}_{environment}'
+        
+        # Robust fallback logic if section name doesn't match expected formats
+        if section_name not in config:
+            fallback = f'cloud_{environment}'
+            if fallback in config:
+                section_name = fallback
+            else:
+                fallback_global = f'cloud_global_{environment}'
+                if fallback_global in config:
+                    section_name = fallback_global
+                    
+        return config[section_name], section_name
+
+    def get_area_code(self) -> str:
+        if 'global' in self.section_name.lower():
+            return "0xFFFFFFFF"  # AREA_CODE_GLOB
+        return "1"  # AREA_CODE_CN
 
     def get_api_config(self):
         with open('/userdata/app/gk/config/api.cfg', 'r') as f:
@@ -216,15 +236,18 @@ class Program:
         
         self.lan_client.connect('127.0.0.1', 9883)
 
-        # Start auto_stream.sh in the background
+        # Start auto_stream.sh in the background with AGORA_AREA_CODE environment variable
         script_dir = os.path.dirname(os.path.realpath(__file__))
         auto_stream_path = os.path.join(script_dir, 'auto_stream.sh')
-        log(LOG_INFO, f"[SYSTEM] Launching {auto_stream_path}...")
+        log(LOG_INFO, f"[SYSTEM] Launching {auto_stream_path} with AGORA_AREA_CODE={self.area_code}...")
         self.auto_stream_proc = None
         try:
+            env = os.environ.copy()
+            env['AGORA_AREA_CODE'] = self.area_code
             self.auto_stream_proc = subprocess.Popen(
                 ['/bin/sh', auto_stream_path],
                 cwd=script_dir,
+                env=env,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL
             )
