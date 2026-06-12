@@ -238,13 +238,13 @@ class Program:
         mqtt_broker = self.cloud_config['mqttBroker']
         mqtt_username, mqtt_password = self.get_cloud_mqtt_credentials()
         
-        def mqtt_on_connect(client, userdata, connect_flags, reason_code, properties):
+        def mqtt_on_connect(client, userdata, flags, rc, *args, **kwargs):
             log(LOG_INFO, '[cloud] Connected / Handshake established with upstream cluster endpoint.')
             self.cloud_client.subscribe(f'anycubic/anycubicCloud/v1/+/printer/{self.model_id}/{self.cloud_device_id}/#')
-        def mqtt_on_connect_fail(client, userdata):
+        def mqtt_on_connect_fail(client, userdata, *args, **kwargs):
             log(LOG_WARNING, '[cloud] Failed to connect')
-        def mqtt_on_disconnect(client, userdata, disconnect_flags, reason_code, properties):
-            log(LOG_WARNING, f'[cloud] Disconnected (reason: {reason_code}); paho will retry')
+        def mqtt_on_disconnect(client, userdata, rc, *args, **kwargs):
+            log(LOG_WARNING, f'[cloud] Disconnected (reason: {rc}); paho will retry')
         def mqtt_on_message(client, userdata, msg):
             try:
                 payload = json.loads(msg.payload.decode("utf-8"))
@@ -292,7 +292,7 @@ class Program:
 
         mqtt_username, mqtt_password = self.get_lan_mqtt_credentials()
 
-        def mqtt_on_connect(client, userdata, connect_flags, reason_code, properties):
+        def mqtt_on_connect(client, userdata, flags, rc, *args, **kwargs):
             log(LOG_INFO, '[lan] Handshake established with localized host execution loop / Connected.')
             self.lan_client.subscribe(f'anycubic/anycubicCloud/v1/printer/public/{self.model_id}/{self.lan_device_id}/#')
             
@@ -325,10 +325,10 @@ class Program:
                 }
             )
 
-        def mqtt_on_connect_fail(client, userdata):
+        def mqtt_on_connect_fail(client, userdata, *args, **kwargs):
             log(LOG_WARNING, '[lan] Failed to connect')
-        def mqtt_on_disconnect(client, userdata, disconnect_flags, reason_code, properties):
-            log(LOG_WARNING, f'[lan] Disconnected (reason: {reason_code}); paho will retry')
+        def mqtt_on_disconnect(client, userdata, rc, *args, **kwargs):
+            log(LOG_WARNING, f'[lan] Disconnected (reason: {rc}); paho will retry')
         def mqtt_on_message(client, userdata, msg):
             try:
                 payload = json.loads(msg.payload.decode("utf-8"))
@@ -410,6 +410,17 @@ class Program:
                 cloud_ok = self.cloud_client.is_connected() if self.cloud_client else False
                 lan_ok = self.lan_client.is_connected() if self.lan_client else False
                 
+                # Check thread liveness to detect crashed loop threads
+                cloud_thread_ok = self.cloud_client._thread.is_alive() if (self.cloud_client and getattr(self.cloud_client, '_thread', None)) else True
+                lan_thread_ok = self.lan_client._thread.is_alive() if (self.lan_client and getattr(self.lan_client, '_thread', None)) else True
+                
+                if not cloud_thread_ok:
+                    log(LOG_ERROR, "[watchdog] Cloud MQTT loop thread is dead!")
+                    cloud_ok = False
+                if not lan_thread_ok:
+                    log(LOG_ERROR, "[watchdog] LAN MQTT loop thread is dead!")
+                    lan_ok = False
+                
                 # Heartbeat logging every 5 minutes
                 if time.time() - last_heartbeat >= 300:
                     log(LOG_INFO, f'[heartbeat] cloud={"up" if cloud_ok else "DOWN"} lan={"up" if lan_ok else "DOWN"}')
@@ -422,7 +433,7 @@ class Program:
                     else:
                         duration = time.time() - disconnect_start
                         if duration >= max_disconnect_duration:
-                            raise RuntimeError(f"Connection lost for {duration:.1f}s (cloud_ok={cloud_ok}, lan_ok={lan_ok}). Restarting app...")
+                            raise RuntimeError(f"Connection lost or loop thread crashed for {duration:.1f}s (cloud_ok={cloud_ok}, lan_ok={lan_ok}). Restarting app...")
                 else:
                     if disconnect_start is not None:
                         log(LOG_INFO, "[watchdog] Connection recovered cleanly.")
