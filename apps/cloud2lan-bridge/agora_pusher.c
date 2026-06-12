@@ -294,11 +294,11 @@ int main(int argc, char *argv[]) {
     memset(service_options, 0, sizeof(service_options));
     *(uint32_t *)service_options = area_code;
     
-    // Explicitly configure Agora SDK logging to /tmp/agora_rtc_sdk.log at DEBUG level
-    service_options[68] = 0; // log_disable = false
-    service_options[69] = 0; // log_disable_desensitize = false
-    *(uint32_t *)(service_options + 72) = 8; // log_level = RTC_LOG_DEBUG
-    *(const char **)(service_options + 76) = "/tmp"; // log_path directory
+    // Disable Agora SDK internal logging to save space on target device
+    service_options[68] = 1; // log_disable = true
+    service_options[69] = 1; // log_disable_desensitize = true
+    *(uint32_t *)(service_options + 72) = 0; // log_level = RTC_LOG_DEFAULT
+    *(const char **)(service_options + 76) = "/tmp"; // log_path = NULL
     
     snprintf((char *)(service_options + 0x58), 0x21, "%s", license);
 
