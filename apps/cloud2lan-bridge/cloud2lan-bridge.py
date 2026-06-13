@@ -74,6 +74,14 @@ class Program:
     area_code = None
 
     def __init__(self):
+        # Clean up any lingering or orphaned instances from previous runs to prevent OOM/resource leaks
+        log(LOG_INFO, "[SYSTEM] Cleaning up any stale bridge processes from previous runs...")
+        for pattern in ['auto_stream.sh', 'agora_pusher', 'ffmpeg -nostdin -loglevel quiet -i http://127.0.0.1:18088/flv', 'nc 127.0.0.1 18086']:
+            try:
+                subprocess.run(['pkill', '-f', pattern], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception:
+                pass
+
         # Wait for the boot-time files we depend on to prevent boot races.
         required_files = [
             '/userdata/app/gk/config/device.ini',
@@ -390,7 +398,8 @@ class Program:
                 cwd=script_dir,
                 env=env,
                 stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
+                stderr=subprocess.DEVNULL,
+                preexec_fn=os.setsid
             )
             log(LOG_INFO, f"[SYSTEM] auto_stream.sh started with PID {self.auto_stream_proc.pid}")
         except Exception as e:
@@ -440,13 +449,24 @@ class Program:
                         disconnect_start = None
         finally:
             if self.auto_stream_proc:
-                log(LOG_INFO, "[SYSTEM] Terminating auto_stream.sh process...")
-                self.auto_stream_proc.terminate()
+                log(LOG_INFO, "[SYSTEM] Terminating auto_stream.sh process group...")
                 try:
+                    pgid = os.getpgid(self.auto_stream_proc.pid)
+                    os.killpg(pgid, signal.SIGTERM)
                     self.auto_stream_proc.wait(timeout=5)
                 except subprocess.TimeoutExpired:
-                    log(LOG_WARNING, "[SYSTEM] auto_stream.sh did not terminate. Killing it...")
-                    self.auto_stream_proc.kill()
+                    log(LOG_WARNING, "[SYSTEM] Process group did not terminate. Killing it...")
+                    try:
+                        os.killpg(pgid, signal.SIGKILL)
+                        self.auto_stream_proc.wait(timeout=2)
+                    except Exception:
+                        pass
+                except Exception as e:
+                    log(LOG_ERROR, f"[SYSTEM] Failed to cleanly terminate process group: {e}")
+                    try:
+                        self.auto_stream_proc.kill()
+                    except Exception:
+                        pass
 
 if __name__ == "__main__":
     program = None
@@ -457,10 +477,19 @@ if __name__ == "__main__":
         log(LOG_ERROR, str(e))
         log(LOG_ERROR, traceback.format_exc())
         if program and hasattr(program, 'auto_stream_proc') and program.auto_stream_proc:
-            log(LOG_INFO, "[SYSTEM] Exception cleanup: Terminating auto_stream.sh...")
-            program.auto_stream_proc.terminate()
+            log(LOG_INFO, "[SYSTEM] Exception cleanup: Terminating auto_stream.sh process group...")
             try:
+                pgid = os.getpgid(program.auto_stream_proc.pid)
+                os.killpg(pgid, signal.SIGTERM)
                 program.auto_stream_proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
-                program.auto_stream_proc.kill()
+                try:
+                    os.killpg(pgid, signal.SIGKILL)
+                except Exception:
+                    pass
+            except Exception:
+                try:
+                    program.auto_stream_proc.kill()
+                except Exception:
+                    pass
         sys.exit(1)

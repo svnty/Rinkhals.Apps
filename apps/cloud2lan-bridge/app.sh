@@ -23,6 +23,12 @@ stop() {
     # Kill the supervisor first so it doesn't immediately respawn the python.
     kill_by_name cloud2lan-bridge.sh
     kill_by_name cloud2lan-bridge.py
+    
+    # Clean up the streaming pipeline and helper processes
+    pkill -f auto_stream.sh 2>/dev/null
+    pkill -f agora_pusher 2>/dev/null
+    pkill -f "ffmpeg -nostdin -loglevel quiet -i http://127.0.0.1:18088/flv" 2>/dev/null
+    pkill -f "nc 127.0.0.1 18086" 2>/dev/null
 }
 
 case "$1" in

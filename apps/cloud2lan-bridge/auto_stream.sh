@@ -23,6 +23,16 @@ is_lan_mode() {
 
 BRIDGE_PID=""
 
+# Start background watchdog to exit if the parent process dies
+PARENT_PID=$PPID
+(
+  while kill -0 $PARENT_PID 2>/dev/null && kill -0 $$ 2>/dev/null; do
+    sleep 5
+  done
+  pkill -P $$ 2>/dev/null
+  kill -9 $$ 2>/dev/null
+) &
+
 cleanup_bridge() {
   if [ -n "$BRIDGE_PID" ]; then
     log_sh "Terminating existing cloud bridge processes (PID: $BRIDGE_PID)..."
